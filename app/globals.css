@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-0: #050605;
+  --bg-1: #0a0c0a;
+  --bg-2: #11140f;
+  --bg-3: #181c14;
+  --line: #1f2418;
+  --line-bright: #2e3a1e;
+  --amber: #d4a017;
+  --amber-bright: #f5c542;
+  --amber-dim: #8a6b13;
+  --green: #6fcf3f;
+  --green-bright: #9eff5e;
+  --green-dim: #3d7821;
+  --red: #e84545;
+  --red-bright: #ff6464;
+  --red-dim: #8a2929;
+  --text-0: #e8e6dc;
+  --text-1: #b8b5a5;
+  --text-2: #76735f;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background: var(--bg-0);
+  color: var(--text-0);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(212, 160, 23, 0.04) 0%, transparent 40%),
+    radial-gradient(circle at 80% 90%, rgba(111, 207, 63, 0.03) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(255, 255, 255, 0.008) 2px,
+    rgba(255, 255, 255, 0.008) 3px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.font-serif { font-family: 'Fraunces', serif; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-1); }
+::-webkit-scrollbar-thumb { background: var(--line-bright); }
+::-webkit-scrollbar-thumb:hover { background: var(--amber-dim); }
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+.pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+@keyframes orb-pulse {
+  0%, 100% { box-shadow: 0 0 8px var(--amber); }
+  50% { box-shadow: 0 0 20px var(--amber-bright); }
+}
+.orb-pulse { animation: orb-pulse 3s ease-in-out infinite; }
+
+@keyframes scroll-tape {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.scroll-tape { animation: scroll-tape 60s linear infinite; }
