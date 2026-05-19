@@ -42,7 +42,16 @@ export async function GET(req: NextRequest) {
     );
 
     const valid = quotes.filter((q): q is any => q !== null && q.c > 0);
-    let results;
+
+    type ScanResult = {
+      symbol: string;
+      price: number;
+      change: number;
+      changePercent: number;
+      metric: string;
+      tag: string;
+    };
+    let results: ScanResult[];
 
     if (type === 'gappers') {
       // Sort by absolute % change from previous close
@@ -58,7 +67,7 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent))
         .slice(0, 10);
     } else if (type === 'volume') {
-      // Without bulk volume data on free tier, we proxy with high % movers
+      // Without bulk volume data on free tier, we proxy with daily range
       // In production with paid feed, swap to actual volume/avgVolume ratio
       results = valid
         .map((q) => ({
@@ -66,11 +75,13 @@ export async function GET(req: NextRequest) {
           price: q.c,
           change: q.d,
           changePercent: q.dp,
+          range: q.h - q.l,
           metric: `Range $${(q.h - q.l).toFixed(2)}`,
           tag: 'vol',
         }))
-        .sort((a, b) => (b.high - b.low) - (a.high - a.low))
-        .slice(0, 10);
+        .sort((a, b) => b.range - a.range)
+        .slice(0, 10)
+        .map(({ range, ...rest }) => rest);
     } else if (type === 'breakouts') {
       // Approximate breakouts: price near daily high
       results = valid
