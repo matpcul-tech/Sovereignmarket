@@ -43,15 +43,14 @@ export async function GET(req: NextRequest) {
 
     const valid = quotes.filter((q): q is any => q !== null && q.c > 0);
 
-    type ScanResult = {
+    let results: Array<{
       symbol: string;
       price: number;
       change: number;
       changePercent: number;
       metric: string;
       tag: string;
-    };
-    let results: ScanResult[];
+    }>;
 
     if (type === 'gappers') {
       // Sort by absolute % change from previous close
