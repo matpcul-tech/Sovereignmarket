@@ -58,10 +58,13 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (cached) {
+      const lv = cached.levels || {};
       return NextResponse.json({
         signal: cached.signal_text,
         tags: cached.tags,
-        levels: cached.levels,
+        action: lv.action,
+        conviction: lv.conviction,
+        levels: { entry: lv.entry, stop: lv.stop, target: lv.target },
         cached: true,
       });
     }
@@ -74,7 +77,7 @@ export async function POST(req: NextRequest) {
     const trendUp = recent.filter((c) => c.close > c.open).length;
     const trendDown = recent.filter((c) => c.close < c.open).length;
 
-    const prompt = `You are an experienced day trader providing technical analysis. Read the chart state below and produce a concise market-structure read.
+    const prompt = `You are an experienced day trader generating an actionable trade pick. Read the chart state below and return a specific call: long, short, or stand aside. Be decisive.
 
 SYMBOL: ${symbol}
 CURRENT PRICE: $${price.toFixed(2)}
@@ -97,18 +100,26 @@ ${body.news && body.news.length > 0 ? `RECENT NEWS:\n${body.news.slice(0, 3).map
 
 OUTPUT FORMAT - respond with valid JSON only, no markdown, no preamble:
 {
-  "signal": "2-3 sentence read of what is happening on the chart. Reference specific price levels, VWAP relationship, momentum, volume context. Use trader vocabulary (reclaim, rejection, flag, breakout, range, etc). Do NOT give buy/sell recommendations - describe the setup only.",
-  "tags": ["tag1", "tag2", "tag3"],
-  "levels": {
-    "support": <number - nearest key support price>,
-    "resistance": <number - nearest key resistance price>,
-    "target": <number - logical measured-move target if setup plays out>
-  }
+  "action": "LONG" | "SHORT" | "WAIT",
+  "conviction": "LOW" | "MEDIUM" | "HIGH",
+  "entry": <number - exact price to enter at, or 0 if action is WAIT>,
+  "stop": <number - price where the thesis is invalidated and you exit, or 0 if WAIT>,
+  "target": <number - first realistic profit target based on measured move or next key level, or 0 if WAIT>,
+  "signal": "3-4 sentence plain-English explanation. Lead with WHY this is the trade (or why to wait). Reference the specific levels, VWAP relationship, momentum, and volume. End with what would invalidate the thesis. Write like you're telling a friend - no robotic phrasing.",
+  "tags": ["tag1", "tag2", "tag3"]
 }
 
-Tags should be from this set: Breakout, Breakdown, VWAP Hold, VWAP Reject, Bull Flag, Bear Flag, Range, Trend Day, Mean Revert, Volume Surge, Overextended, Consolidation, News Catalyst, Failed Breakout, Reclaim, Rejection.
+DECISION RULES:
+- LONG only when momentum aligns (price above VWAP + bullish structure + RSI not overbought) OR a clean reversal off oversold
+- SHORT only when momentum aligns down (price below VWAP + bearish structure + RSI not oversold) OR a clean rejection at resistance
+- WAIT when the chart is chop, mid-range, or signals conflict. It is BETTER to wait than to force a trade.
+- Conviction HIGH only when 4+ signals align. MEDIUM when 2-3 align. LOW when the setup is marginal but tradeable.
+- Reward-to-risk on the trade (|target - entry| / |entry - stop|) MUST be >= 1.5 or you must return WAIT.
+- Stops should respect ATR - tighter than 0.5x ATR will get stopped on noise, wider than 2x ATR is poor R:R.
 
-Do not predict direction. Describe what IS, not what WILL be. Be precise about levels.`;
+Tags should be from this set: Breakout, Breakdown, VWAP Hold, VWAP Reject, Bull Flag, Bear Flag, Range, Trend Day, Mean Revert, Volume Surge, Overextended, Consolidation, News Catalyst, Failed Breakout, Reclaim, Rejection, Chop, Wait Setup.
+
+Be decisive. A clear WAIT is more valuable than a forced LONG.`;
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -127,19 +138,31 @@ Do not predict direction. Describe what IS, not what WILL be. Be precise about l
     const cleaned = textBlock.text.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(cleaned);
 
-    // Cache it
+    // Cache it - pack action/conviction into levels jsonb so we don't need a schema migration
     await supabase.from('signal_cache').upsert({
       symbol,
       state_hash: stateHash,
       signal_text: parsed.signal,
       tags: parsed.tags,
-      levels: parsed.levels,
+      levels: {
+        action: parsed.action,
+        conviction: parsed.conviction,
+        entry: parsed.entry,
+        stop: parsed.stop,
+        target: parsed.target,
+      },
     });
 
     return NextResponse.json({
       signal: parsed.signal,
       tags: parsed.tags,
-      levels: parsed.levels,
+      action: parsed.action,
+      conviction: parsed.conviction,
+      levels: {
+        entry: parsed.entry,
+        stop: parsed.stop,
+        target: parsed.target,
+      },
       cached: false,
     });
   } catch (err: any) {

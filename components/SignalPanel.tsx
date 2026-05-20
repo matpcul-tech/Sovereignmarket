@@ -9,6 +9,25 @@ export default function SignalPanel({
   loading: boolean;
   onRegenerate: () => void;
 }) {
+  const action: 'LONG' | 'SHORT' | 'WAIT' | undefined = signal?.action;
+  const conviction: 'LOW' | 'MEDIUM' | 'HIGH' | undefined = signal?.conviction;
+
+  const actionColor =
+    action === 'LONG'
+      ? 'text-green border-green'
+      : action === 'SHORT'
+        ? 'text-red border-red'
+        : 'text-text-2 border-line-bright';
+
+  const convictionColor =
+    conviction === 'HIGH'
+      ? 'text-amber-bright'
+      : conviction === 'MEDIUM'
+        ? 'text-amber-dim'
+        : 'text-text-2';
+
+  const isTradeable = action === 'LONG' || action === 'SHORT';
+
   return (
     <div className="bg-gradient-to-b from-bg-1 to-bg-2 border border-line-bright relative overflow-hidden">
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber to-transparent" />
@@ -32,6 +51,21 @@ export default function SignalPanel({
           <div className="text-text-2 text-xs italic">Reading chart state…</div>
         ) : signal ? (
           <>
+            {action && (
+              <div className="flex items-center gap-2 mb-3">
+                <div
+                  className={`px-2.5 py-1 border-2 font-bold tracking-[0.2em] text-xs ${actionColor}`}
+                >
+                  {action}
+                </div>
+                {conviction && (
+                  <div className={`text-[9px] tracking-[0.2em] uppercase ${convictionColor}`}>
+                    {conviction} conviction
+                  </div>
+                )}
+              </div>
+            )}
+
             <div
               className="font-serif text-sm leading-relaxed text-text-0 mb-3 font-medium"
               dangerouslySetInnerHTML={{ __html: signal.signal }}
@@ -50,11 +84,23 @@ export default function SignalPanel({
               </div>
             )}
 
-            {signal.levels && (
+            {isTradeable && signal.levels && (
               <div className="grid grid-cols-3 gap-px bg-line mt-2">
-                <LevelCell label="Support" value={signal.levels.support} color="text-green" />
-                <LevelCell label="Resistance" value={signal.levels.resistance} color="text-red" />
-                <LevelCell label="Target" value={signal.levels.target} color="text-amber-bright" />
+                <LevelCell label="Entry" value={signal.levels.entry} color="text-amber-bright" />
+                <LevelCell label="Stop" value={signal.levels.stop} color="text-red" />
+                <LevelCell label="Target" value={signal.levels.target} color="text-green" />
+              </div>
+            )}
+
+            {isTradeable && signal.levels?.entry && signal.levels?.stop && signal.levels?.target && (
+              <div className="mt-2 text-[9px] tracking-wider text-text-2 uppercase text-center">
+                R:R {' '}
+                <span className="text-text-0 font-bold tabular-nums">
+                  {(
+                    Math.abs(signal.levels.target - signal.levels.entry) /
+                    Math.max(0.0001, Math.abs(signal.levels.entry - signal.levels.stop))
+                  ).toFixed(2)}
+                </span>
               </div>
             )}
 
