@@ -67,22 +67,48 @@ async function fetchStockCandles(symbol: string, resolution: string) {
 }
 
 async function fetchCryptoCandles(symbol: string, resolution: string) {
-  const interval = mapResolutionToBinance(resolution);
-  const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=200`;
+  // Coinbase Exchange - binance.com geo-blocks US Vercel functions
+  const product = toCoinbaseProduct(symbol);
+  const granularity = mapResolutionToCoinbase(resolution);
+  const url = `https://api.exchange.coinbase.com/products/${product}/candles?granularity=${granularity}`;
   const res = await fetch(url, { next: { revalidate: 30 } });
-  if (!res.ok) throw new Error(`Binance error: ${res.status}`);
-  const klines = await res.json();
+  if (!res.ok) throw new Error(`Coinbase candles error: ${res.status}`);
+  const rows = await res.json();
 
-  const candles = klines.map((k: any[]) => ({
-    time: k[0],
-    open: parseFloat(k[1]),
-    high: parseFloat(k[2]),
-    low: parseFloat(k[3]),
-    close: parseFloat(k[4]),
-    volume: parseFloat(k[5]),
-  }));
+  // Coinbase returns [time, low, high, open, close, volume] in DESC order
+  const candles = (rows as any[][])
+    .map((k) => ({
+      time: k[0] * 1000,
+      low: k[1],
+      high: k[2],
+      open: k[3],
+      close: k[4],
+      volume: k[5],
+    }))
+    .sort((a, b) => a.time - b.time);
 
   return { symbol, resolution, candles };
+}
+
+function toCoinbaseProduct(symbol: string): string {
+  const s = symbol.toUpperCase();
+  if (s.endsWith('USDT') || s.endsWith('USDC')) return `${s.slice(0, -4)}-USD`;
+  if (s.endsWith('USD')) return `${s.slice(0, -3)}-USD`;
+  if (s.includes('-')) return s;
+  return `${s}-USD`;
+}
+
+function mapResolutionToCoinbase(r: string): number {
+  // Coinbase granularity is in seconds; only 60/300/900/3600/21600/86400 allowed
+  const map: Record<string, number> = {
+    '1': 60,
+    '5': 300,
+    '15': 900,
+    '30': 900, // round down to nearest supported
+    '60': 3600,
+    'D': 86400,
+  };
+  return map[r] || 900;
 }
 
 function mapResolutionToAV(r: string) {

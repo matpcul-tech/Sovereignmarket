@@ -57,24 +57,50 @@ async function fetchStock(symbol: string) {
 }
 
 async function fetchCrypto(symbol: string) {
-  // Binance public API - no key needed, real-time
-  // Expects symbols like BTCUSDT, ETHUSDT
-  const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`;
-  const res = await fetch(url, { next: { revalidate: 15 } });
-  if (!res.ok) throw new Error(`Binance error: ${res.status}`);
-  const q = await res.json();
+  // Coinbase Exchange - works from US/Vercel, no key needed.
+  // binance.com returns 451 (geo-block), binance.us is unreliable.
+  const product = toCoinbaseProduct(symbol);
+
+  const [tickerRes, statsRes] = await Promise.all([
+    fetch(`https://api.exchange.coinbase.com/products/${product}/ticker`, {
+      next: { revalidate: 15 },
+    }),
+    fetch(`https://api.exchange.coinbase.com/products/${product}/stats`, {
+      next: { revalidate: 15 },
+    }),
+  ]);
+
+  if (!tickerRes.ok) throw new Error(`Coinbase ticker error: ${tickerRes.status}`);
+  if (!statsRes.ok) throw new Error(`Coinbase stats error: ${statsRes.status}`);
+
+  const ticker = await tickerRes.json();
+  const stats = await statsRes.json();
+
+  const price = parseFloat(ticker.price);
+  const open = parseFloat(stats.open);
+  const change = price - open;
+  const changePercent = open ? (change / open) * 100 : 0;
 
   return {
     symbol,
-    price: parseFloat(q.lastPrice),
-    change: parseFloat(q.priceChange),
-    changePercent: parseFloat(q.priceChangePercent),
-    high: parseFloat(q.highPrice),
-    low: parseFloat(q.lowPrice),
-    open: parseFloat(q.openPrice),
-    prevClose: parseFloat(q.prevClosePrice),
-    volume: parseFloat(q.volume),
-    timestamp: q.closeTime,
+    price,
+    change,
+    changePercent,
+    high: parseFloat(stats.high),
+    low: parseFloat(stats.low),
+    open,
+    prevClose: open,
+    volume: parseFloat(stats.volume),
+    timestamp: new Date(ticker.time).getTime(),
     delayed: false,
   };
+}
+
+// BTCUSDT -> BTC-USD, ETHUSDT -> ETH-USD, BTCUSD -> BTC-USD
+function toCoinbaseProduct(symbol: string): string {
+  const s = symbol.toUpperCase();
+  if (s.endsWith('USDT') || s.endsWith('USDC')) return `${s.slice(0, -4)}-USD`;
+  if (s.endsWith('USD')) return `${s.slice(0, -3)}-USD`;
+  if (s.includes('-')) return s;
+  return `${s}-USD`;
 }
