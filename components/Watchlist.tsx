@@ -24,14 +24,11 @@ export default function Watchlist({
     e.preventDefault();
     if (!newSymbol.trim()) return;
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
     const symbol = newSymbol.trim().toUpperCase();
     const { data, error } = await supabase
       .from('watchlist')
       .insert({
-        user_id: user.id,
         symbol,
         asset_type: newType,
         display_name: symbol,

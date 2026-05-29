@@ -4,14 +4,10 @@ import { useEffect, useState } from 'react';
 
 export default function TopBar({
   quote,
-  userEmail,
-  onSignOut,
 }: {
   quote: any;
   watchlistQuotes: any;
   watchlist: any[];
-  userEmail: string;
-  onSignOut: () => void;
 }) {
   const [time, setTime] = useState('');
 
@@ -91,13 +87,6 @@ export default function TopBar({
           <span>{session}</span>
         </div>
         <div className="text-amber-bright font-semibold tracking-wider">{time}</div>
-        <button
-          onClick={onSignOut}
-          className="text-[9px] tracking-[0.15em] uppercase text-text-2 hover:text-amber-bright transition-colors border border-line px-3 py-1.5"
-          title={userEmail}
-        >
-          Sign Out
-        </button>
       </div>
     </header>
   );
