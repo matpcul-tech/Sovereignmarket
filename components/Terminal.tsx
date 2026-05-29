@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase-browser';
 import { Candle, ema, vwap, rsi, atr, macd } from '@/lib/indicators';
 import PriceChart from './PriceChart';
 import Watchlist from './Watchlist';
@@ -46,11 +45,9 @@ interface Quote {
 }
 
 export default function Terminal({
-  userEmail,
   initialWatchlist,
   initialTrades,
 }: {
-  userEmail: string;
   initialWatchlist: WatchlistItem[];
   initialTrades: Trade[];
 }) {
@@ -175,20 +172,12 @@ export default function Terminal({
     }
   }, [activeSymbol?.symbol, quote?.price]); // intentionally limited deps
 
-  async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  }
-
   return (
     <div className="relative z-10 min-h-screen">
       <TopBar
         quote={quote}
         watchlistQuotes={quotes}
         watchlist={watchlist}
-        userEmail={userEmail}
-        onSignOut={handleSignOut}
       />
 
       <TickerTape quotes={quotes} watchlist={watchlist} />

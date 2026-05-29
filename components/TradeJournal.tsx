@@ -44,14 +44,11 @@ export default function TradeJournal({
   async function addTrade(e: React.FormEvent) {
     e.preventDefault();
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
     const isClosed = form.exit_price && form.exit_price !== '';
     const { data, error } = await supabase
       .from('trades')
       .insert({
-        user_id: user.id,
         symbol: form.symbol.toUpperCase(),
         side: form.side,
         entry_price: parseFloat(form.entry_price),
