@@ -6,16 +6,24 @@ export default function Scanner({ onSelectSymbol }: { onSelectSymbol: (sym: stri
   const [type, setType] = useState<'gappers' | 'volume' | 'breakouts'>('gappers');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setError(false);
       try {
         const r = await fetch(`/api/scanner?type=${type}`);
         const data = await r.json();
-        if (!data.error) setResults(data.results || []);
-      } catch (err) {
-        console.error(err);
+        if (data.error) {
+          setError(true);
+          setResults([]);
+        } else {
+          setResults(data.results || []);
+        }
+      } catch {
+        setError(true);
+        setResults([]);
       } finally {
         setLoading(false);
       }
@@ -32,7 +40,9 @@ export default function Scanner({ onSelectSymbol }: { onSelectSymbol: (sym: stri
           <span className="text-amber text-[8px]">▸</span>
           Market Scanner
         </div>
-        <div className="text-[9px] text-text-2 tracking-wider">{loading ? 'Loading…' : 'Live'}</div>
+        <div className="text-[9px] text-text-2 tracking-wider">
+          {loading ? 'Loading…' : error ? 'Error' : 'Live'}
+        </div>
       </div>
 
       <div className="flex bg-bg-2 border-b border-line">
@@ -52,10 +62,16 @@ export default function Scanner({ onSelectSymbol }: { onSelectSymbol: (sym: stri
       </div>
 
       <div className="max-h-72 overflow-y-auto">
-        {results.length === 0 && !loading && (
+        {loading && results.length === 0 && (
+          <div className="px-3.5 py-6 text-center text-text-2 text-[10px]">Loading…</div>
+        )}
+        {!loading && error && (
           <div className="px-3.5 py-6 text-center text-text-2 text-[10px]">
-            No results
+            Data unavailable — check API key
           </div>
+        )}
+        {!loading && !error && results.length === 0 && (
+          <div className="px-3.5 py-6 text-center text-text-2 text-[10px]">No results</div>
         )}
         {results.map((r) => (
           <div
