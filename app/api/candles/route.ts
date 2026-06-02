@@ -37,17 +37,24 @@ async function fetchStockCandles(symbol: string, resolution: string) {
   if (!key) throw new Error('FINNHUB_API_KEY not configured');
 
   const now = Math.floor(Date.now() / 1000);
-  // Daily needs 6 months of history; intraday needs 2 days to cover current session + prev
-  const from = resolution === 'D'
-    ? now - 180 * 24 * 60 * 60
-    : now - 2 * 24 * 60 * 60;
+  // Tighter windows per resolution — smaller requests work better on free tier
+  const windowMap: Record<string, number> = {
+    '1':  1 * 24 * 60 * 60,   // 1 day  for 1m
+    '5':  2 * 24 * 60 * 60,   // 2 days for 5m
+    '15': 5 * 24 * 60 * 60,   // 5 days for 15m
+    '60': 14 * 24 * 60 * 60,  // 2 weeks for 1h
+    'D':  365 * 24 * 60 * 60, // 1 year for daily
+  };
+  const from = now - (windowMap[resolution] ?? 5 * 24 * 60 * 60);
 
   const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${now}&token=${key}`;
   const res = await fetch(url, { next: { revalidate: 60 } });
   if (!res.ok) throw new Error(`Finnhub candle error: ${res.status}`);
   const json = await res.json();
 
-  if (json.s === 'no_data' || !json.t) throw new Error('No candle data — market may be closed');
+  if (json.s === 'no_data' || !json.t || json.t.length === 0) {
+    throw new Error('No candle data — market may be closed or try a longer timeframe');
+  }
   if (json.s !== 'ok') throw new Error(`Finnhub candles: ${json.s}`);
 
   const candles = (json.t as number[]).map((t, i) => ({
