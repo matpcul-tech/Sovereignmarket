@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const cache = new Map<string, { data: any; ts: number }>();
-const CACHE_MS = 60_000; // 1 min cache for candles
+const CACHE_MS = 60_000;
 
 export async function GET(req: NextRequest) {
   const symbol = req.nextUrl.searchParams.get('symbol');
@@ -33,41 +33,36 @@ export async function GET(req: NextRequest) {
 }
 
 async function fetchStockCandles(symbol: string, resolution: string) {
-  // Finnhub free tier: only resolution=D (daily) is reliable on free
-  // For intraday on free tier we use Alpha Vantage TIME_SERIES_INTRADAY
-  const avKey = process.env.ALPHA_VANTAGE_API_KEY;
-  if (!avKey) throw new Error('ALPHA_VANTAGE_API_KEY not configured');
+  const key = process.env.FINNHUB_API_KEY;
+  if (!key) throw new Error('FINNHUB_API_KEY not configured');
 
-  const avInterval = mapResolutionToAV(resolution);
-  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${encodeURIComponent(symbol)}&interval=${avInterval}&outputsize=compact&apikey=${avKey}`;
+  const now = Math.floor(Date.now() / 1000);
+  // Daily needs 6 months of history; intraday needs 2 days to cover current session + prev
+  const from = resolution === 'D'
+    ? now - 180 * 24 * 60 * 60
+    : now - 2 * 24 * 60 * 60;
+
+  const url = `https://finnhub.io/api/v1/stock/candle?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&from=${from}&to=${now}&token=${key}`;
   const res = await fetch(url, { next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`Alpha Vantage error: ${res.status}`);
+  if (!res.ok) throw new Error(`Finnhub candle error: ${res.status}`);
   const json = await res.json();
 
-  const seriesKey = `Time Series (${avInterval})`;
-  const series = json[seriesKey];
-  if (!series) {
-    if (json['Note']) throw new Error('Alpha Vantage rate limit hit - 25 calls/day on free tier');
-    if (json['Information']) throw new Error('Alpha Vantage: ' + json['Information']);
-    throw new Error('No data returned');
-  }
+  if (json.s === 'no_data' || !json.t) throw new Error('No candle data — market may be closed');
+  if (json.s !== 'ok') throw new Error(`Finnhub candles: ${json.s}`);
 
-  const candles = Object.entries(series)
-    .map(([time, ohlc]: [string, any]) => ({
-      time: new Date(time).getTime(),
-      open: parseFloat(ohlc['1. open']),
-      high: parseFloat(ohlc['2. high']),
-      low: parseFloat(ohlc['3. low']),
-      close: parseFloat(ohlc['4. close']),
-      volume: parseFloat(ohlc['5. volume']),
-    }))
-    .sort((a, b) => a.time - b.time);
+  const candles = (json.t as number[]).map((t, i) => ({
+    time: t * 1000,
+    open: json.o[i],
+    high: json.h[i],
+    low: json.l[i],
+    close: json.c[i],
+    volume: json.v[i],
+  })).sort((a, b) => a.time - b.time);
 
   return { symbol, resolution, candles };
 }
 
 async function fetchCryptoCandles(symbol: string, resolution: string) {
-  // Coinbase Exchange - binance.com geo-blocks US Vercel functions
   const product = toCoinbaseProduct(symbol);
   const granularity = mapResolutionToCoinbase(resolution);
   const url = `https://api.exchange.coinbase.com/products/${product}/candles?granularity=${granularity}`;
@@ -75,7 +70,6 @@ async function fetchCryptoCandles(symbol: string, resolution: string) {
   if (!res.ok) throw new Error(`Coinbase candles error: ${res.status}`);
   const rows = await res.json();
 
-  // Coinbase returns [time, low, high, open, close, volume] in DESC order
   const candles = (rows as any[][])
     .map((k) => ({
       time: k[0] * 1000,
@@ -99,37 +93,13 @@ function toCoinbaseProduct(symbol: string): string {
 }
 
 function mapResolutionToCoinbase(r: string): number {
-  // Coinbase granularity is in seconds; only 60/300/900/3600/21600/86400 allowed
   const map: Record<string, number> = {
     '1': 60,
     '5': 300,
     '15': 900,
-    '30': 900, // round down to nearest supported
+    '30': 900,
     '60': 3600,
     'D': 86400,
   };
   return map[r] || 900;
-}
-
-function mapResolutionToAV(r: string) {
-  const map: Record<string, string> = {
-    '1': '1min',
-    '5': '5min',
-    '15': '15min',
-    '30': '30min',
-    '60': '60min',
-  };
-  return map[r] || '15min';
-}
-
-function mapResolutionToBinance(r: string) {
-  const map: Record<string, string> = {
-    '1': '1m',
-    '5': '5m',
-    '15': '15m',
-    '30': '30m',
-    '60': '1h',
-    'D': '1d',
-  };
-  return map[r] || '15m';
 }

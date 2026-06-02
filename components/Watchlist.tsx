@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@/lib/supabase-browser';
 
 export default function Watchlist({
   items,
@@ -20,34 +19,25 @@ export default function Watchlist({
   const [newSymbol, setNewSymbol] = useState('');
   const [newType, setNewType] = useState('stock');
 
-  async function addSymbol(e: React.FormEvent) {
+  function addSymbol(e: React.FormEvent) {
     e.preventDefault();
     if (!newSymbol.trim()) return;
-    const supabase = createClient();
-
     const symbol = newSymbol.trim().toUpperCase();
-    const newItem = {
-      symbol,
-      asset_type: newType,
-      display_name: symbol,
-      position: items.length,
-    };
-
-    const { data, error } = await supabase
-      .from('watchlist')
-      .insert(newItem)
-      .select()
-      .single();
-
-    // Optimistic fallback: add to local state even if DB insert fails
-    onUpdate([...items, error || !data ? { id: crypto.randomUUID(), ...newItem } : data]);
+    onUpdate([
+      ...items,
+      {
+        id: crypto.randomUUID(),
+        symbol,
+        asset_type: newType,
+        display_name: symbol,
+        position: items.length,
+      },
+    ]);
     setNewSymbol('');
     setAdding(false);
   }
 
-  async function removeSymbol(id: string) {
-    const supabase = createClient();
-    await supabase.from('watchlist').delete().eq('id', id);
+  function removeSymbol(id: string) {
     onUpdate(items.filter((i) => i.id !== id));
   }
 

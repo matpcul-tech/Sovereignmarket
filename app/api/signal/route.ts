@@ -47,21 +47,25 @@ export async function POST(req: NextRequest) {
       .digest('hex')
       .slice(0, 16);
 
-    // Check cache
-    const supabase = createClient();
-    const { data: cached } = await supabase
-      .from('signal_cache')
-      .select('*')
-      .eq('symbol', symbol)
-      .eq('state_hash', stateHash)
-      .gte('created_at', new Date(Date.now() - 10 * 60_000).toISOString())
-      .single();
+    // Check cache (best-effort — table may not exist yet)
+    let cachedRow: any = null;
+    try {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('signal_cache')
+        .select('*')
+        .eq('symbol', symbol)
+        .eq('state_hash', stateHash)
+        .gte('created_at', new Date(Date.now() - 10 * 60_000).toISOString())
+        .single();
+      cachedRow = data;
+    } catch {}
 
-    if (cached) {
-      const lv = cached.levels || {};
+    if (cachedRow) {
+      const lv = cachedRow.levels || {};
       return NextResponse.json({
-        signal: cached.signal_text,
-        tags: cached.tags,
+        signal: cachedRow.signal_text,
+        tags: cachedRow.tags,
         action: lv.action,
         conviction: lv.conviction,
         levels: { entry: lv.entry, stop: lv.stop, target: lv.target },
@@ -138,20 +142,23 @@ Be decisive. A clear WAIT is more valuable than a forced LONG.`;
     const cleaned = textBlock.text.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(cleaned);
 
-    // Cache it - pack action/conviction into levels jsonb so we don't need a schema migration
-    await supabase.from('signal_cache').upsert({
-      symbol,
-      state_hash: stateHash,
-      signal_text: parsed.signal,
-      tags: parsed.tags,
-      levels: {
-        action: parsed.action,
-        conviction: parsed.conviction,
-        entry: parsed.entry,
-        stop: parsed.stop,
-        target: parsed.target,
-      },
-    });
+    // Cache it (best-effort — don't let a failed upsert discard the signal)
+    try {
+      const supabase = createClient();
+      await supabase.from('signal_cache').upsert({
+        symbol,
+        state_hash: stateHash,
+        signal_text: parsed.signal,
+        tags: parsed.tags,
+        levels: {
+          action: parsed.action,
+          conviction: parsed.conviction,
+          entry: parsed.entry,
+          stop: parsed.stop,
+          target: parsed.target,
+        },
+      });
+    } catch {}
 
     return NextResponse.json({
       signal: parsed.signal,

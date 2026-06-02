@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Candle, ema, vwap, rsi, atr, macd } from '@/lib/indicators';
 import PriceChart from './PriceChart';
 import Watchlist from './Watchlist';
@@ -51,6 +51,9 @@ function inferAssetType(sym: string): 'stock' | 'etf' | 'crypto' {
   return 'stock';
 }
 
+const LS_WATCHLIST = 'sovereign_watchlist';
+const LS_ACTIVE = 'sovereign_active';
+
 export default function Terminal({
   initialWatchlist,
   initialTrades,
@@ -61,7 +64,7 @@ export default function Terminal({
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(initialWatchlist);
   const [trades, setTrades] = useState<Trade[]>(initialTrades);
 
-  // Global symbol state — single source of truth for chart/quote/signal
+  // Global symbol state
   const [symbol, setSymbol] = useState<string>(initialWatchlist[0]?.symbol || '');
   const [assetType, setAssetType] = useState<string>(initialWatchlist[0]?.asset_type || 'stock');
   const [displayName, setDisplayName] = useState<string>(initialWatchlist[0]?.display_name || '');
@@ -75,6 +78,46 @@ export default function Terminal({
   const [signal, setSignal] = useState<any>(null);
   const [signalLoading, setSignalLoading] = useState(false);
 
+  // Track whether localStorage has been read so we don't overwrite it prematurely
+  const lsLoaded = useRef(false);
+
+  // Restore watchlist + last active symbol from localStorage on mount
+  useEffect(() => {
+    try {
+      const storedList = localStorage.getItem(LS_WATCHLIST);
+      const storedActive = localStorage.getItem(LS_ACTIVE);
+
+      if (storedList) {
+        const parsed: WatchlistItem[] = JSON.parse(storedList);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setWatchlist(parsed);
+          // Restore last active symbol
+          if (storedActive) {
+            const active = JSON.parse(storedActive);
+            setSymbol(active.symbol);
+            setAssetType(active.assetType);
+            setDisplayName(active.displayName);
+            setActiveWatchlistId(active.watchlistId ?? null);
+          } else {
+            // Default to first watchlist item
+            const first = parsed[0];
+            setSymbol(first.symbol);
+            setAssetType(first.asset_type);
+            setDisplayName(first.display_name);
+            setActiveWatchlistId(first.id);
+          }
+        }
+      }
+    } catch {}
+    lsLoaded.current = true;
+  }, []);
+
+  // Persist watchlist to localStorage whenever it changes (after first load)
+  const updateWatchlist = useCallback((items: WatchlistItem[]) => {
+    setWatchlist(items);
+    try { localStorage.setItem(LS_WATCHLIST, JSON.stringify(items)); } catch {}
+  }, []);
+
   // Unified handler — called by search, watchlist click, and scanner click
   const handleSelectSymbol = useCallback((sym: string, type: string, display: string, wlId: string | null = null) => {
     setSymbol(sym);
@@ -84,6 +127,9 @@ export default function Terminal({
     setQuote(null);
     setCandles([]);
     setSignal(null);
+    try {
+      localStorage.setItem(LS_ACTIVE, JSON.stringify({ symbol: sym, assetType: type, displayName: display, watchlistId: wlId }));
+    } catch {}
   }, []);
 
   // Fetch quote + candles for current symbol
@@ -106,7 +152,7 @@ export default function Terminal({
     }
   }, [resolution]);
 
-  // Load all watchlist quotes for ticker tape + watchlist price display
+  // Load all watchlist quotes for ticker tape + watchlist panel
   const loadAllQuotes = useCallback(async () => {
     const results: Record<string, Quote> = {};
     await Promise.all(
@@ -140,7 +186,7 @@ export default function Terminal({
     return () => clearInterval(id);
   }, [symbol, assetType, loadData]);
 
-  // Compute indicators from candles
+  // Compute indicators
   const closes = candles.map((c) => c.close);
   const vwapSeries = candles.length > 0 ? vwap(candles) : [];
   const ema9Series = ema(closes, 9);
@@ -223,7 +269,7 @@ export default function Terminal({
             quotes={quotes}
             activeId={activeWatchlistId}
             onSelect={(item) => handleSelectSymbol(item.symbol, item.asset_type, item.display_name, item.id)}
-            onUpdate={setWatchlist}
+            onUpdate={updateWatchlist}
           />
         </aside>
 
@@ -254,7 +300,7 @@ export default function Terminal({
       </div>
 
       <footer className="px-6 py-4 bg-bg-1 border-t border-line flex justify-between text-[9px] tracking-[0.15em] uppercase text-text-2">
-        <div>Data: Finnhub · Alpha Vantage · Binance · 15min Delayed Equities</div>
+        <div>Data: Finnhub · Coinbase · 15min Delayed Equities</div>
         <div className="font-serif italic normal-case tracking-normal text-[11px] text-amber-dim">
           A Sovereign Shield Technologies Product
         </div>
