@@ -1,18 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@/lib/supabase-browser';
 
 export default function Watchlist({
   items,
   quotes,
-  active,
+  activeId,
   onSelect,
   onUpdate,
 }: {
   items: any[];
   quotes: Record<string, any>;
-  active: any;
+  activeId: string | null;
   onSelect: (item: any) => void;
   onUpdate: (items: any[]) => void;
 }) {
@@ -20,35 +19,25 @@ export default function Watchlist({
   const [newSymbol, setNewSymbol] = useState('');
   const [newType, setNewType] = useState('stock');
 
-  async function addSymbol(e: React.FormEvent) {
+  function addSymbol(e: React.FormEvent) {
     e.preventDefault();
     if (!newSymbol.trim()) return;
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
     const symbol = newSymbol.trim().toUpperCase();
-    const { data, error } = await supabase
-      .from('watchlist')
-      .insert({
-        user_id: user.id,
+    onUpdate([
+      ...items,
+      {
+        id: crypto.randomUUID(),
         symbol,
         asset_type: newType,
         display_name: symbol,
         position: items.length,
-      })
-      .select()
-      .single();
-    if (!error && data) {
-      onUpdate([...items, data]);
-      setNewSymbol('');
-      setAdding(false);
-    }
+      },
+    ]);
+    setNewSymbol('');
+    setAdding(false);
   }
 
-  async function removeSymbol(id: string) {
-    const supabase = createClient();
-    await supabase.from('watchlist').delete().eq('id', id);
+  function removeSymbol(id: string) {
     onUpdate(items.filter((i) => i.id !== id));
   }
 
@@ -97,14 +86,19 @@ export default function Watchlist({
       )}
 
       <div>
+        {items.length === 0 && (
+          <div className="px-3.5 py-6 text-center text-text-2 text-[10px]">
+            No symbols — click + Add
+          </div>
+        )}
         {items.map((item) => {
           const q = quotes[item.symbol];
-          const isActive = active?.id === item.id;
+          const isActive = activeId === item.id;
           return (
             <div
               key={item.id}
               onClick={() => onSelect(item)}
-              className={`grid grid-cols-[1fr_auto] gap-2 items-center px-3.5 py-2 border-b border-line cursor-pointer transition-colors group ${
+              className={`grid grid-cols-[1fr_auto] gap-2 items-center px-3.5 py-2 border-b border-line cursor-pointer transition-colors group relative ${
                 isActive ? 'bg-bg-3 border-l-2 border-l-amber pl-[12px]' : 'hover:bg-bg-2'
               }`}
             >
@@ -114,9 +108,9 @@ export default function Watchlist({
                   {item.display_name}
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-right flex items-center gap-2">
                 {q ? (
-                  <>
+                  <div>
                     <div className="text-text-0 font-semibold text-[11px]">
                       ${q.price < 1 ? q.price.toFixed(4) : q.price.toFixed(2)}
                     </div>
@@ -124,21 +118,21 @@ export default function Watchlist({
                       {q.changePercent >= 0 ? '+' : ''}
                       {q.changePercent?.toFixed(2)}%
                     </div>
-                  </>
+                  </div>
                 ) : (
                   <div className="text-text-3 text-[10px]">--</div>
                 )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeSymbol(item.id);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 text-text-3 hover:text-red text-[13px] leading-none transition-opacity px-1"
+                  title="Remove"
+                >
+                  ×
+                </button>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeSymbol(item.id);
-                }}
-                className="opacity-0 group-hover:opacity-100 text-text-3 hover:text-red text-[9px] absolute right-1"
-                style={{ display: 'none' }}
-              >
-                ×
-              </button>
             </div>
           );
         })}

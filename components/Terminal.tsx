@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase-browser';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Candle, ema, vwap, rsi, atr, macd } from '@/lib/indicators';
 import PriceChart from './PriceChart';
 import Watchlist from './Watchlist';
@@ -45,20 +44,32 @@ interface Quote {
   prevClose: number;
 }
 
+function inferAssetType(sym: string): 'stock' | 'etf' | 'crypto' {
+  const upper = sym.toUpperCase();
+  if (/USDT$|USD$/.test(upper)) return 'crypto';
+  if (['SPY', 'QQQ', 'IWM', 'DIA', 'GLD', 'TLT', 'XLF', 'ARKK', 'SMH', 'SOXS', 'TQQQ', 'UVXY'].includes(upper)) return 'etf';
+  return 'stock';
+}
+
+const LS_WATCHLIST = 'sovereign_watchlist';
+const LS_ACTIVE = 'sovereign_active';
+
 export default function Terminal({
-  userEmail,
   initialWatchlist,
   initialTrades,
 }: {
-  userEmail: string;
   initialWatchlist: WatchlistItem[];
   initialTrades: Trade[];
 }) {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(initialWatchlist);
   const [trades, setTrades] = useState<Trade[]>(initialTrades);
-  const [activeSymbol, setActiveSymbol] = useState<WatchlistItem | null>(
-    initialWatchlist[0] || null
-  );
+
+  // Global symbol state
+  const [symbol, setSymbol] = useState<string>(initialWatchlist[0]?.symbol || '');
+  const [assetType, setAssetType] = useState<string>(initialWatchlist[0]?.asset_type || 'stock');
+  const [displayName, setDisplayName] = useState<string>(initialWatchlist[0]?.display_name || '');
+  const [activeWatchlistId, setActiveWatchlistId] = useState<string | null>(initialWatchlist[0]?.id || null);
+
   const [quote, setQuote] = useState<Quote | null>(null);
   const [candles, setCandles] = useState<Candle[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
@@ -67,13 +78,68 @@ export default function Terminal({
   const [signal, setSignal] = useState<any>(null);
   const [signalLoading, setSignalLoading] = useState(false);
 
-  // Fetch quote + candles for active symbol
-  const loadSymbol = useCallback(async (item: WatchlistItem) => {
+  // Track whether localStorage has been read so we don't overwrite it prematurely
+  const lsLoaded = useRef(false);
+
+  // Restore watchlist + last active symbol from localStorage on mount
+  useEffect(() => {
+    try {
+      const storedList = localStorage.getItem(LS_WATCHLIST);
+      const storedActive = localStorage.getItem(LS_ACTIVE);
+
+      if (storedList) {
+        const parsed: WatchlistItem[] = JSON.parse(storedList);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setWatchlist(parsed);
+          // Restore last active symbol
+          if (storedActive) {
+            const active = JSON.parse(storedActive);
+            setSymbol(active.symbol);
+            setAssetType(active.assetType);
+            setDisplayName(active.displayName);
+            setActiveWatchlistId(active.watchlistId ?? null);
+          } else {
+            // Default to first watchlist item
+            const first = parsed[0];
+            setSymbol(first.symbol);
+            setAssetType(first.asset_type);
+            setDisplayName(first.display_name);
+            setActiveWatchlistId(first.id);
+          }
+        }
+      }
+    } catch {}
+    lsLoaded.current = true;
+  }, []);
+
+  // Persist watchlist to localStorage whenever it changes (after first load)
+  const updateWatchlist = useCallback((items: WatchlistItem[]) => {
+    setWatchlist(items);
+    try { localStorage.setItem(LS_WATCHLIST, JSON.stringify(items)); } catch {}
+  }, []);
+
+  // Unified handler — called by search, watchlist click, and scanner click
+  const handleSelectSymbol = useCallback((sym: string, type: string, display: string, wlId: string | null = null) => {
+    setSymbol(sym);
+    setAssetType(type);
+    setDisplayName(display);
+    setActiveWatchlistId(wlId);
+    setQuote(null);
+    setCandles([]);
+    setSignal(null);
+    try {
+      localStorage.setItem(LS_ACTIVE, JSON.stringify({ symbol: sym, assetType: type, displayName: display, watchlistId: wlId }));
+    } catch {}
+  }, []);
+
+  // Fetch quote + candles for current symbol
+  const loadData = useCallback(async (sym: string, type: string) => {
+    if (!sym) return;
     setLoading(true);
     try {
       const [qRes, cRes] = await Promise.all([
-        fetch(`/api/quote?symbol=${item.symbol}&type=${item.asset_type}`),
-        fetch(`/api/candles?symbol=${item.symbol}&resolution=${resolution}&type=${item.asset_type}`),
+        fetch(`/api/quote?symbol=${sym}&type=${type}`),
+        fetch(`/api/candles?symbol=${sym}&resolution=${resolution}&type=${type}`),
       ]);
       const q = await qRes.json();
       const c = await cRes.json();
@@ -86,7 +152,7 @@ export default function Terminal({
     }
   }, [resolution]);
 
-  // Load all watchlist quotes
+  // Load all watchlist quotes for ticker tape + watchlist panel
   const loadAllQuotes = useCallback(async () => {
     const results: Record<string, Quote> = {};
     await Promise.all(
@@ -101,12 +167,12 @@ export default function Terminal({
     setQuotes(results);
   }, [watchlist]);
 
-  // Initial load + when active symbol changes
+  // Reload when symbol or resolution changes
   useEffect(() => {
-    if (activeSymbol) loadSymbol(activeSymbol);
-  }, [activeSymbol, loadSymbol]);
+    if (symbol) loadData(symbol, assetType);
+  }, [symbol, assetType, loadData]);
 
-  // Load watchlist quotes on mount and refresh every 30s
+  // Watchlist quotes on mount and every 30s
   useEffect(() => {
     loadAllQuotes();
     const id = setInterval(loadAllQuotes, 30_000);
@@ -115,10 +181,10 @@ export default function Terminal({
 
   // Refresh active symbol every 30s
   useEffect(() => {
-    if (!activeSymbol) return;
-    const id = setInterval(() => loadSymbol(activeSymbol), 30_000);
+    if (!symbol) return;
+    const id = setInterval(() => loadData(symbol, assetType), 30_000);
     return () => clearInterval(id);
-  }, [activeSymbol, loadSymbol]);
+  }, [symbol, assetType, loadData]);
 
   // Compute indicators
   const closes = candles.map((c) => c.close);
@@ -145,14 +211,14 @@ export default function Terminal({
 
   // Generate AI signal
   const generateSignal = useCallback(async () => {
-    if (!activeSymbol || !quote || candles.length < 5) return;
+    if (!symbol || !quote || candles.length < 5) return;
     setSignalLoading(true);
     try {
       const res = await fetch('/api/signal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          symbol: activeSymbol.symbol,
+          symbol,
           price: quote.price,
           changePercent: quote.changePercent,
           candles: candles.slice(-30),
@@ -166,20 +232,14 @@ export default function Terminal({
     } finally {
       setSignalLoading(false);
     }
-  }, [activeSymbol, quote, candles, indicators]);
+  }, [symbol, quote, candles, indicators]);
 
-  // Auto-generate signal when symbol or quote changes substantially
+  // Auto-generate signal when symbol or price changes
   useEffect(() => {
     if (quote && candles.length >= 5) {
       generateSignal();
     }
-  }, [activeSymbol?.symbol, quote?.price]); // intentionally limited deps
-
-  async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  }
+  }, [symbol, quote?.price]); // intentionally limited deps
 
   return (
     <div className="relative z-10 min-h-screen">
@@ -187,8 +247,10 @@ export default function Terminal({
         quote={quote}
         watchlistQuotes={quotes}
         watchlist={watchlist}
-        userEmail={userEmail}
-        onSignOut={handleSignOut}
+        onSearch={(sym) => {
+          const type = inferAssetType(sym);
+          handleSelectSymbol(sym, type, sym, null);
+        }}
       />
 
       <TickerTape quotes={quotes} watchlist={watchlist} />
@@ -196,24 +258,26 @@ export default function Terminal({
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-px bg-line min-h-[calc(100vh-100px)]">
         {/* LEFT */}
         <aside className="bg-bg-0 flex flex-col">
-          <Scanner onSelectSymbol={(sym) => {
-            const found = watchlist.find((w) => w.symbol === sym);
-            if (found) setActiveSymbol(found);
-          }} />
+          <Scanner
+            onSelectSymbol={(sym) => {
+              const type = inferAssetType(sym);
+              handleSelectSymbol(sym, type, sym, null);
+            }}
+          />
           <Watchlist
             items={watchlist}
             quotes={quotes}
-            active={activeSymbol}
-            onSelect={setActiveSymbol}
-            onUpdate={setWatchlist}
+            activeId={activeWatchlistId}
+            onSelect={(item) => handleSelectSymbol(item.symbol, item.asset_type, item.display_name, item.id)}
+            onUpdate={updateWatchlist}
           />
         </aside>
 
         {/* CENTER */}
         <main className="bg-bg-0 flex flex-col">
           <PriceChart
-            symbol={activeSymbol?.symbol || ''}
-            displayName={activeSymbol?.display_name || ''}
+            symbol={symbol}
+            displayName={displayName}
             quote={quote}
             candles={candles}
             indicators={indicators}
@@ -236,7 +300,7 @@ export default function Terminal({
       </div>
 
       <footer className="px-6 py-4 bg-bg-1 border-t border-line flex justify-between text-[9px] tracking-[0.15em] uppercase text-text-2">
-        <div>Data: Finnhub · Alpha Vantage · Binance · 15min Delayed Equities</div>
+        <div>Data: Finnhub · Coinbase · 15min Delayed Equities</div>
         <div className="font-serif italic normal-case tracking-normal text-[11px] text-amber-dim">
           A Sovereign Shield Technologies Product
         </div>

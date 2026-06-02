@@ -44,30 +44,38 @@ export default function TradeJournal({
   async function addTrade(e: React.FormEvent) {
     e.preventDefault();
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
     const isClosed = form.exit_price && form.exit_price !== '';
+    const entryP = parseFloat(form.entry_price);
+    const exitP = isClosed ? parseFloat(form.exit_price) : null;
+    const sz = parseFloat(form.size);
+    const now = new Date().toISOString();
+
+    const payload = {
+      symbol: form.symbol.toUpperCase(),
+      side: form.side,
+      entry_price: entryP,
+      exit_price: exitP,
+      size: sz,
+      setup: form.setup || null,
+      status: isClosed ? 'closed' : 'open',
+      entry_time: now,
+      exit_time: isClosed ? now : null,
+      pnl: isClosed && exitP !== null
+        ? (exitP - entryP) * sz * (form.side === 'short' ? -1 : 1)
+        : null,
+    };
+
     const { data, error } = await supabase
       .from('trades')
-      .insert({
-        user_id: user.id,
-        symbol: form.symbol.toUpperCase(),
-        side: form.side,
-        entry_price: parseFloat(form.entry_price),
-        exit_price: isClosed ? parseFloat(form.exit_price) : null,
-        size: parseFloat(form.size),
-        setup: form.setup || null,
-        status: isClosed ? 'closed' : 'open',
-        exit_time: isClosed ? new Date().toISOString() : null,
-      })
+      .insert(payload)
       .select()
       .single();
-    if (!error && data) {
-      onTradesUpdate([data, ...trades]);
-      setForm({ symbol: '', side: 'long', entry_price: '', exit_price: '', size: '', setup: '' });
-      setAdding(false);
-    }
+
+    // Optimistic fallback: add to local state even if DB insert fails
+    onTradesUpdate([error || !data ? { id: crypto.randomUUID(), ...payload } : data, ...trades]);
+    setForm({ symbol: '', side: 'long', entry_price: '', exit_price: '', size: '', setup: '' });
+    setAdding(false);
   }
 
   async function closeTrade(id: string, exitPrice: number) {

@@ -216,8 +216,26 @@ export default function PriceChart({
         </div>
       </div>
 
-      <div className="bg-bg-0 px-6 py-5" style={{ minHeight: '380px' }}>
-        <canvas ref={canvasRef} style={{ width: '100%', height: '360px' }} />
+      <div className="bg-bg-0 px-6 py-5 relative" style={{ minHeight: '380px' }}>
+        <canvas ref={canvasRef} style={{ width: '100%', height: '360px', display: candles.length > 0 ? 'block' : 'none' }} />
+        {candles.length === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center gap-2">
+            {loading ? (
+              <div className="text-text-2 text-[11px] tracking-[0.15em] uppercase animate-pulse">
+                Loading chart…
+              </div>
+            ) : (
+              <>
+                <div className="text-text-2 text-[11px] tracking-[0.15em] uppercase">
+                  No chart data for {resolution === '1' ? '1m' : resolution === '5' ? '5m' : resolution === '15' ? '15m' : resolution === '60' ? '1h' : '1d'} resolution
+                </div>
+                <div className="text-text-3 text-[10px]">
+                  {symbol ? 'Market may be closed · Try 15M or 1D' : 'Select a symbol to load chart'}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-6 gap-px bg-line border-t border-line">

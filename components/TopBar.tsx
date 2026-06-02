@@ -4,16 +4,15 @@ import { useEffect, useState } from 'react';
 
 export default function TopBar({
   quote,
-  userEmail,
-  onSignOut,
+  onSearch,
 }: {
   quote: any;
   watchlistQuotes: any;
   watchlist: any[];
-  userEmail: string;
-  onSignOut: () => void;
+  onSearch: (symbol: string) => void;
 }) {
   const [time, setTime] = useState('');
+  const [searchInput, setSearchInput] = useState('');
 
   useEffect(() => {
     const tick = () => {
@@ -32,6 +31,15 @@ export default function TopBar({
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const sym = searchInput.trim().toUpperCase();
+    if (sym) {
+      onSearch(sym);
+      setSearchInput('');
+    }
+  }
 
   // Determine market session
   const now = new Date();
@@ -81,23 +89,32 @@ export default function TopBar({
             </span>
           </span>
         ) : (
-          <span>Select a symbol</span>
+          <span>Select a symbol or search above</span>
         )}
       </div>
 
       <div className="flex items-center gap-4">
+        {/* Ticker search */}
+        <form onSubmit={handleSearch} className="flex items-center gap-1">
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="AAPL, BTCUSDT…"
+            className="bg-bg-2 border border-line px-3 py-1.5 text-[11px] text-text-0 focus:outline-none focus:border-amber-dim w-32 placeholder-text-3"
+          />
+          <button
+            type="submit"
+            className="px-3 py-1.5 bg-amber text-bg-0 text-[10px] font-bold tracking-[0.1em] uppercase hover:bg-amber-bright transition-colors"
+          >
+            Go
+          </button>
+        </form>
+
         <div className={`flex items-center gap-2 text-[10px] tracking-[0.15em] uppercase ${sessionColor}`}>
           <span className={`w-2 h-2 rounded-full pulse-glow ${session.includes('Open') ? 'bg-green shadow-[0_0_12px_var(--green)]' : 'bg-text-2'}`} />
           <span>{session}</span>
         </div>
         <div className="text-amber-bright font-semibold tracking-wider">{time}</div>
-        <button
-          onClick={onSignOut}
-          className="text-[9px] tracking-[0.15em] uppercase text-text-2 hover:text-amber-bright transition-colors border border-line px-3 py-1.5"
-          title={userEmail}
-        >
-          Sign Out
-        </button>
       </div>
     </header>
   );

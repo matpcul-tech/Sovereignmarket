@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const cache = new Map<string, { data: any; ts: number }>();
-const CACHE_MS = 60_000; // 1 min cache for candles
+const CACHE_MS = 60_000;
 
 export async function GET(req: NextRequest) {
   const symbol = req.nextUrl.searchParams.get('symbol');
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
 async function fetchStockCandles(symbol: string, resolution: string) {
   // Yahoo Finance chart API - no key, real-time, generous limits.
-  // Alpha Vantage free tier (25 calls/day) was getting exhausted instantly.
+  // Finnhub free tier dropped US stock candles in 2024; Alpha Vantage caps at 25/day.
   const { interval, range } = mapResolutionToYahoo(resolution);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     symbol
@@ -85,7 +85,6 @@ async function fetchCryptoCandles(symbol: string, resolution: string) {
   if (!res.ok) throw new Error(`Coinbase candles error: ${res.status}`);
   const rows = await res.json();
 
-  // Coinbase returns [time, low, high, open, close, volume] in DESC order
   const candles = (rows as any[][])
     .map((k) => ({
       time: k[0] * 1000,
@@ -109,12 +108,11 @@ function toCoinbaseProduct(symbol: string): string {
 }
 
 function mapResolutionToCoinbase(r: string): number {
-  // Coinbase granularity is in seconds; only 60/300/900/3600/21600/86400 allowed
   const map: Record<string, number> = {
     '1': 60,
     '5': 300,
     '15': 900,
-    '30': 900, // round down to nearest supported
+    '30': 900,
     '60': 3600,
     'D': 86400,
   };
@@ -133,16 +131,4 @@ function mapResolutionToYahoo(r: string): { interval: string; range: string } {
     'D': { interval: '1d', range: '6mo' },
   };
   return map[r] || { interval: '15m', range: '5d' };
-}
-
-function mapResolutionToBinance(r: string) {
-  const map: Record<string, string> = {
-    '1': '1m',
-    '5': '5m',
-    '15': '15m',
-    '30': '30m',
-    '60': '1h',
-    'D': '1d',
-  };
-  return map[r] || '15m';
 }
