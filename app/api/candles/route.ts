@@ -33,35 +33,45 @@ export async function GET(req: NextRequest) {
 }
 
 async function fetchStockCandles(symbol: string, resolution: string) {
-  // Finnhub free tier: only resolution=D (daily) is reliable on free
-  // For intraday on free tier we use Alpha Vantage TIME_SERIES_INTRADAY
-  const avKey = process.env.ALPHA_VANTAGE_API_KEY;
-  if (!avKey) throw new Error('ALPHA_VANTAGE_API_KEY not configured');
-
-  const avInterval = mapResolutionToAV(resolution);
-  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${encodeURIComponent(symbol)}&interval=${avInterval}&outputsize=compact&apikey=${avKey}`;
-  const res = await fetch(url, { next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`Alpha Vantage error: ${res.status}`);
+  // Yahoo Finance chart API - no key, real-time, generous limits.
+  // Alpha Vantage free tier (25 calls/day) was getting exhausted instantly.
+  const { interval, range } = mapResolutionToYahoo(resolution);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    symbol
+  )}?interval=${interval}&range=${range}`;
+  const res = await fetch(url, {
+    next: { revalidate: 60 },
+    headers: { 'User-Agent': 'Mozilla/5.0 SovereignMarkets' },
+  });
+  if (!res.ok) throw new Error(`Yahoo error: ${res.status}`);
   const json = await res.json();
 
-  const seriesKey = `Time Series (${avInterval})`;
-  const series = json[seriesKey];
-  if (!series) {
-    if (json['Note']) throw new Error('Alpha Vantage rate limit hit - 25 calls/day on free tier');
-    if (json['Information']) throw new Error('Alpha Vantage: ' + json['Information']);
-    throw new Error('No data returned');
+  const result = json?.chart?.result?.[0];
+  if (!result) {
+    const err = json?.chart?.error?.description || 'No data returned';
+    throw new Error(err);
   }
 
-  const candles = Object.entries(series)
-    .map(([time, ohlc]: [string, any]) => ({
-      time: new Date(time).getTime(),
-      open: parseFloat(ohlc['1. open']),
-      high: parseFloat(ohlc['2. high']),
-      low: parseFloat(ohlc['3. low']),
-      close: parseFloat(ohlc['4. close']),
-      volume: parseFloat(ohlc['5. volume']),
+  const timestamps: number[] = result.timestamp || [];
+  const q = result.indicators?.quote?.[0] || {};
+  const opens: (number | null)[] = q.open || [];
+  const highs: (number | null)[] = q.high || [];
+  const lows: (number | null)[] = q.low || [];
+  const closes: (number | null)[] = q.close || [];
+  const vols: (number | null)[] = q.volume || [];
+
+  const candles = timestamps
+    .map((t, i) => ({
+      time: t * 1000,
+      open: opens[i] ?? null,
+      high: highs[i] ?? null,
+      low: lows[i] ?? null,
+      close: closes[i] ?? null,
+      volume: vols[i] ?? 0,
     }))
-    .sort((a, b) => a.time - b.time);
+    .filter((c) => c.open !== null && c.close !== null) as Array<{
+      time: number; open: number; high: number; low: number; close: number; volume: number;
+    }>;
 
   return { symbol, resolution, candles };
 }
@@ -111,15 +121,18 @@ function mapResolutionToCoinbase(r: string): number {
   return map[r] || 900;
 }
 
-function mapResolutionToAV(r: string) {
-  const map: Record<string, string> = {
-    '1': '1min',
-    '5': '5min',
-    '15': '15min',
-    '30': '30min',
-    '60': '60min',
+function mapResolutionToYahoo(r: string): { interval: string; range: string } {
+  // Yahoo intervals: 1m, 2m, 5m, 15m, 30m, 60m, 90m, 1d
+  // Intraday intervals require shorter ranges
+  const map: Record<string, { interval: string; range: string }> = {
+    '1': { interval: '1m', range: '1d' },
+    '5': { interval: '5m', range: '5d' },
+    '15': { interval: '15m', range: '5d' },
+    '30': { interval: '30m', range: '1mo' },
+    '60': { interval: '60m', range: '1mo' },
+    'D': { interval: '1d', range: '6mo' },
   };
-  return map[r] || '15min';
+  return map[r] || { interval: '15m', range: '5d' };
 }
 
 function mapResolutionToBinance(r: string) {
