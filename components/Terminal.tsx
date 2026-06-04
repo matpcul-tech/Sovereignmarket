@@ -302,7 +302,7 @@ export default function Terminal({
       <footer className="px-6 py-4 bg-bg-1 border-t border-line flex justify-between text-[9px] tracking-[0.15em] uppercase text-text-2">
         <div>Data: Finnhub · Coinbase · 15min Delayed Equities</div>
         <div className="font-serif italic normal-case tracking-normal text-[11px] text-amber-dim">
-          A Sovereign Shield Technologies Product
+          Schwabach's Market
         </div>
         <div>v0.1.0 · {new Date().toISOString().split('T')[0]}</div>
       </footer>

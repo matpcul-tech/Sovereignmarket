@@ -34,7 +34,7 @@ export default function LoginPage() {
             <span className="font-serif text-2xl font-black text-amber-bright">S</span>
           </div>
           <h1 className="font-serif text-3xl font-bold text-text-0 mb-2 tracking-tight">
-            Sovereign <em className="italic text-amber-bright font-medium">Markets</em>
+            Schwabach's <em className="italic text-amber-bright font-medium">Market</em>
           </h1>
           <p className="text-text-2 text-[10px] tracking-[0.3em] uppercase">
             Intraday Intelligence Terminal
@@ -78,7 +78,7 @@ export default function LoginPage() {
         </div>
 
         <div className="text-center mt-8 text-[9px] tracking-[0.2em] uppercase text-text-2">
-          A Sovereign Shield Technologies Product
+          Intraday Intelligence Terminal
         </div>
       </div>
     </div>

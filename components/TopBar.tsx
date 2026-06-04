@@ -73,7 +73,7 @@ export default function TopBar({
           <span className="font-serif text-sm font-black text-amber-bright">S</span>
         </div>
         <div className="flex flex-col leading-tight">
-          <div className="font-serif text-base font-bold text-text-0">Sovereign Markets</div>
+          <div className="font-serif text-base font-bold text-text-0">Schwabach's Market</div>
           <div className="text-[9px] tracking-[0.2em] text-text-2 uppercase">
             Intraday Intelligence Terminal
           </div>

@@ -35,7 +35,7 @@ export default function SignalPanel({
       <div className="flex items-center justify-between px-3.5 py-3 border-b border-line">
         <div className="flex items-center gap-2 text-[9px] tracking-[0.25em] uppercase text-amber-bright font-bold">
           <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-amber-bright to-amber-dim orb-pulse" />
-          Sovereign Signal
+          Schwabach's Signal
         </div>
         <button
           onClick={onRegenerate}

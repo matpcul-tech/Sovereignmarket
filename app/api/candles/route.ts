@@ -41,7 +41,7 @@ async function fetchStockCandles(symbol: string, resolution: string) {
   )}?interval=${interval}&range=${range}`;
   const res = await fetch(url, {
     next: { revalidate: 60 },
-    headers: { 'User-Agent': 'Mozilla/5.0 SovereignMarkets' },
+    headers: { 'User-Agent': 'Mozilla/5.0 SchwabachsMarket' },
   });
   if (!res.ok) throw new Error(`Yahoo error: ${res.status}`);
   const json = await res.json();

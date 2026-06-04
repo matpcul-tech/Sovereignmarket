@@ -1,8 +1,6 @@
-# Sovereign Markets
+# Schwabach's Market
 
 Intraday Intelligence Terminal — AI-powered day trading insights and chart analysis.
-
-A Sovereign Shield Technologies product.
 
 ## What's in here
 
@@ -11,7 +9,7 @@ A complete Next.js 14 + Supabase trading app with:
 - **Market scanner** — gappers, volume leaders, breakouts (Finnhub)
 - **Multi-asset charts** — stocks, ETFs, crypto with 15min-delayed quotes
 - **Technical indicators** — VWAP, EMA 9/20/50, RSI, MACD, ATR computed client-side
-- **Sovereign Signal** — Claude reads the chart state and produces trader-style interpretation with key levels
+- **Schwabach's Signal** — Claude reads the chart state and produces trader-style interpretation with key levels
 - **News feed** — filtered by your watchlist with keyword sentiment
 - **Trade journal** — auto-computed P/L, win rate, best-setup analytics
 - **Magic-link auth** with Supabase + RLS on all tables
@@ -115,4 +113,4 @@ supabase/schema.sql  → full database schema with RLS
 
 ## Standing rule
 
-This app provides **technical analysis and market structure context**, not investment advice. The Sovereign Signal layer describes what is happening on the chart in trader vocabulary. It does not predict direction and does not tell you to buy or sell. Trading decisions are yours.
+This app provides **technical analysis and market structure context**, not investment advice. Schwabach's Signal describes what is happening on the chart in trader vocabulary. Trading decisions are yours.

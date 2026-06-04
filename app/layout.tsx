@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Sovereign Markets — Intraday Intelligence Terminal',
-  description: 'AI-powered day trading insights and chart analysis. A Sovereign Shield Technologies product.',
+  title: "Schwabach's Market — Intraday Intelligence Terminal",
+  description: 'AI-powered day trading insights and chart analysis.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
