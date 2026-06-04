@@ -87,24 +87,32 @@ export default function Terminal({
       const storedList = localStorage.getItem(LS_WATCHLIST);
       const storedActive = localStorage.getItem(LS_ACTIVE);
 
-      if (storedList) {
+      if (storedList !== null) {
+        // Once the user has saved a watchlist (even an empty one), respect it.
+        // Never overlay the server seed on top of their choices.
         const parsed: WatchlistItem[] = JSON.parse(storedList);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           setWatchlist(parsed);
-          // Restore last active symbol
-          if (storedActive) {
-            const active = JSON.parse(storedActive);
-            setSymbol(active.symbol);
-            setAssetType(active.assetType);
-            setDisplayName(active.displayName);
-            setActiveWatchlistId(active.watchlistId ?? null);
+          if (parsed.length > 0) {
+            if (storedActive) {
+              const active = JSON.parse(storedActive);
+              setSymbol(active.symbol);
+              setAssetType(active.assetType);
+              setDisplayName(active.displayName);
+              setActiveWatchlistId(active.watchlistId ?? null);
+            } else {
+              const first = parsed[0];
+              setSymbol(first.symbol);
+              setAssetType(first.asset_type);
+              setDisplayName(first.display_name);
+              setActiveWatchlistId(first.id);
+            }
           } else {
-            // Default to first watchlist item
-            const first = parsed[0];
-            setSymbol(first.symbol);
-            setAssetType(first.asset_type);
-            setDisplayName(first.display_name);
-            setActiveWatchlistId(first.id);
+            // User has an empty watchlist by choice - clear active symbol too
+            setSymbol('');
+            setAssetType('stock');
+            setDisplayName('');
+            setActiveWatchlistId(null);
           }
         }
       }
