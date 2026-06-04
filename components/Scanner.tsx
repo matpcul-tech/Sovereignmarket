@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 export default function Scanner({ onSelectSymbol }: { onSelectSymbol: (sym: string) => void }) {
-  const [type, setType] = useState<'gappers' | 'volume' | 'breakouts'>('gappers');
+  const [type, setType] = useState<'premarket' | 'gappers' | 'volume' | 'breakouts'>('premarket');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -46,17 +46,17 @@ export default function Scanner({ onSelectSymbol }: { onSelectSymbol: (sym: stri
       </div>
 
       <div className="flex bg-bg-2 border-b border-line">
-        {(['gappers', 'volume', 'breakouts'] as const).map((t) => (
+        {(['premarket', 'gappers', 'volume', 'breakouts'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setType(t)}
-            className={`flex-1 py-2.5 px-2 text-[9px] tracking-[0.15em] uppercase border-r border-line last:border-r-0 transition-all ${
+            className={`flex-1 py-2.5 px-1 text-[8px] tracking-[0.1em] uppercase border-r border-line last:border-r-0 transition-all ${
               type === t
                 ? 'text-amber-bright bg-bg-1 shadow-[inset_0_-2px_0_var(--amber)]'
                 : 'text-text-2 hover:text-text-1'
             }`}
           >
-            {t}
+            {t === 'premarket' ? 'Pre-Market' : t}
           </button>
         ))}
       </div>
@@ -92,6 +92,8 @@ export default function Scanner({ onSelectSymbol }: { onSelectSymbol: (sym: stri
                   ? 'border-amber-dim text-amber'
                   : r.tag === 'vol'
                   ? 'border-green-dim text-green'
+                  : r.tag === 'pre'
+                  ? 'border-purple-500 text-purple-300'
                   : 'border-blue-700 text-blue-300'
               }`}
             >

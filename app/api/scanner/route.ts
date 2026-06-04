@@ -12,6 +12,28 @@ const SCAN_UNIVERSE = [
   'UPST', 'NIO', 'LCID', 'RIVN', 'F', 'GM',
 ];
 
+// Larger universe for pre-market scouting - common pre-market movers
+const PREMARKET_UNIVERSE = [
+  ...SCAN_UNIVERSE,
+  // Megacaps + indices
+  'BRK-B', 'V', 'JPM', 'WMT', 'XOM', 'UNH', 'JNJ', 'PG', 'MA', 'HD',
+  // Tech / growth
+  'ORCL', 'CRM', 'ADBE', 'PYPL', 'INTC', 'CSCO', 'SHOP', 'SNOW', 'NET',
+  'DDOG', 'ZS', 'PANW', 'NOW', 'TEAM', 'ABNB', 'UBER', 'LYFT', 'DASH',
+  // Biotech / pharma (frequent pre-market gappers on news)
+  'PFE', 'MRNA', 'BNTX', 'NVAX', 'GILD', 'BIIB', 'REGN', 'VRTX', 'LLY',
+  // EV / clean energy
+  'XPEV', 'LI', 'CHPT', 'PLUG', 'ENPH', 'FSLR', 'RUN',
+  // Meme / retail favorites
+  'GME', 'AMC', 'BBBY', 'CVNA', 'BYND', 'PTON', 'AFRM',
+  // Energy / commodities
+  'OXY', 'CVX', 'SLB', 'HAL', 'FCX', 'NEM',
+  // Financials
+  'BAC', 'WFC', 'C', 'GS', 'MS', 'BLK', 'SCHW',
+  // Semi / hardware
+  'TSM', 'QCOM', 'TXN', 'ASML', 'MRVL', 'ON',
+];
+
 export async function GET(req: NextRequest) {
   const type = req.nextUrl.searchParams.get('type') || 'gappers';
   const cacheKey = `scan:${type}`;
@@ -21,6 +43,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    if (type === 'premarket') {
+      const results = await scanPremarket();
+      const payload = { type, results, asOf: Date.now() };
+      cache.set(cacheKey, { data: payload, ts: Date.now() });
+      return NextResponse.json(payload);
+    }
+
     const key = process.env.FINNHUB_API_KEY;
     if (!key) throw new Error('FINNHUB_API_KEY not configured');
 
@@ -104,4 +133,57 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+}
+
+// Pre-market scout via Yahoo Finance with extended-hours data
+async function scanPremarket() {
+  const movers = await Promise.all(
+    PREMARKET_UNIVERSE.map(async (sym) => {
+      try {
+        const r = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+            sym
+          )}?interval=5m&range=1d&includePrePost=true`,
+          {
+            headers: { 'User-Agent': 'Mozilla/5.0 SchwabachsMarket' },
+            next: { revalidate: 120 },
+          }
+        );
+        if (!r.ok) return null;
+        const json = await r.json();
+        const result = json?.chart?.result?.[0];
+        if (!result) return null;
+
+        const meta = result.meta || {};
+        const prevClose = meta.chartPreviousClose ?? meta.previousClose;
+        if (!prevClose) return null;
+
+        // Get the last available close - during pre-market this is the pre-market price
+        const closes: (number | null)[] = result.indicators?.quote?.[0]?.close || [];
+        const lastClose = [...closes].reverse().find((c) => c != null) as number | undefined;
+        const price = lastClose ?? meta.regularMarketPrice;
+        if (!price) return null;
+
+        const changePercent = ((price - prevClose) / prevClose) * 100;
+        return { symbol: sym, price, prevClose, changePercent };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const valid = movers.filter((m): m is NonNullable<typeof m> => m !== null);
+
+  return valid
+    .filter((m) => Math.abs(m.changePercent) >= 1) // only show movers > 1%
+    .map((m) => ({
+      symbol: m.symbol,
+      price: m.price,
+      change: m.price - m.prevClose,
+      changePercent: m.changePercent,
+      metric: `${m.changePercent > 0 ? '+' : ''}${m.changePercent.toFixed(2)}% pre`,
+      tag: 'pre',
+    }))
+    .sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent))
+    .slice(0, 15);
 }
